@@ -147,7 +147,6 @@ class Simulator:
         return df_stock, blk_diffs    
 
     def subprocess(self, df):
-        print(df)
         out = df.copy()
         column = 'time'
 
@@ -174,16 +173,10 @@ class Simulator:
     def cal_score(self, blk_diffs):
         # Block Order Difference
         blk_diff_m = 0
-        blk_diff_p = 0
         for item in blk_diffs:
             if item < 0:
                 blk_diff_m = blk_diff_m + abs(item)
-            if item > 0:
-                blk_diff_p = blk_diff_p + abs(item)
-#         score = blk_diff_m + blk_diff_p
-        Fp = 1 - (blk_diff_m/32550830)
-        Fq = 1 - (blk_diff_p/32550830)
-        score = 0.5 * Fp + 0.2 * Fq 
+        score = blk_diff_m
         return score
     
     def get_score(self, df):

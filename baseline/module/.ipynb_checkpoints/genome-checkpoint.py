@@ -46,7 +46,11 @@ class Genome():
         self.change_time = 0
         self.change_mode = 0
         self.delay = 0
-    
+        
+        # CHANGE_COUNT
+        self.change_total_count = 0
+        self.change_total_time = 0
+        
     def update_mask(self):
         self.mask[:] = False
         if self.process == 0:
@@ -197,6 +201,8 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 6
                     self.change_mode = 5
+                    self.change_total_time += 6
+                    self.change_total_count += 1
     
                 if self.change_time > 1:
                     self.change_time -= 1
@@ -212,7 +218,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 6
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                    
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -227,7 +235,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 7
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -242,7 +252,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 6
                     self.change_mode = 8
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -257,7 +269,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 9
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -272,7 +286,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 10
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -287,7 +303,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 11
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -302,7 +320,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 12
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -317,7 +337,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 6
                     self.change_mode = 13
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -332,7 +354,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 14
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -347,7 +371,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 13
                     self.change_mode = 15
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -362,7 +388,9 @@ class Genome():
                 if self.change_mode == 0:
                     self.change_time = 6
                     self.change_mode = 5
-    
+                    self.change_total_time += 6
+                    self.change_total_count += 1
+                        
                 if self.change_time > 1:
                     self.change_time -= 1
                 
@@ -396,10 +424,17 @@ class Genome():
         self.change_time = 0
         self.change_mode = 0
         self.delay = 0
-        return self.submission    
+        self.change_score = (1 - (self.change_total_time / 2184)) / (1 + 0.1*self.change_total_count)
+        self.change_total_count = 0
+        self.change_total_time = 0
+        
+        
+        return self.submission, self.change_score
     
 def genome_score(genome):
-    submission = genome.predict(order_ini)    
+    submission, change_score = genome.predict(order_ini)    
     genome.submission = submission    
-    genome.score, _ = simulator.get_score(submission)    
+    genome.score, _ = simulator.get_score(submission)
+    genome.score = genome.score + 0.2 * change_score + 0.1
+    
     return genome

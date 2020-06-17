@@ -180,7 +180,9 @@ class Simulator:
             if item > 0:
                 blk_diff_p = blk_diff_p + abs(item)
 #         score = blk_diff_m + blk_diff_p
-        score = blk_diff_m*0.5 + blk_diff_p*0.2
+        Fp = 1 - (blk_diff_m/32550830)
+        Fq = 1 - (blk_diff_p/32550830)
+        score = 0.5 * Fp + 0.2 * Fq 
         return score
     
     def get_score(self, df):
