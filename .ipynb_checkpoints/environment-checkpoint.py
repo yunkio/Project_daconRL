@@ -161,6 +161,52 @@ class FactoryEnv:
         self.p += over
         self.q += under
 
+#     def get_state(self, prev_action = 0):
+#         s = list()
+        
+#         if prev_action in range(0,4): # Check
+#             s_action = 0
+#             s_time = self.check_time
+
+#         elif prev_action in range(4,8): # Change
+#             s_action = 1
+#             s_time = self.change_time
+
+#         elif prev_action == 8: # Stop
+#             s_action = 2
+#             s_time = self.stop_time
+
+#         elif prev_action > 8: # Process
+#             s_action = 3
+#             s_time = self.process_time
+
+            
+#         order_len = 30 # 30일 후의 주문까지 state로 고려
+#         date = self.step_count // 24
+#         order_state = list(self.order.loc[date : date+order_len, 'BLK_1':'BLK_4'].values.flatten())
+        
+#         s.append(s_action)
+#         # 0 : Check, 1 : Change, 2 : Stop, 3 : Process (1)
+#         s.append(self.process_mode)
+#         # 0~3 : 1~4 (1)
+#         s.append(s_time)
+#         # action에 따른 연속 시간 (1)
+#         s += list(self.stock.values[0])
+#         # 재고량 (12)
+#         s += order_state
+#         # 주문량 (124)
+        
+#         return s
+
+    def get_sum_groupby(self, a, key_pos=0, value_pos=1):
+        n  = np.unique(a[:,key_pos])
+        nv = np.array( [ np.sum(a[a[:,key_pos]==i,value_pos]) for i in n] )
+        r  = np.column_stack((n,nv)) # Stack 1-D arrays as columns into a 2-D array
+        return r
+    
+    
+    
+    
     def get_state(self, prev_action = 0):
         s = list()
         
@@ -181,20 +227,29 @@ class FactoryEnv:
             s_time = self.process_time
 
             
+        # 주문량 state 구하기
         order_len = 30 # 30일 후의 주문까지 state로 고려
         date = self.step_count // 24
-        order_state = list(self.order.loc[date : date+order_len, 'BLK_1':'BLK_4'].values.flatten())
+        order_state = self.order.loc[date : date+order_len, 'BLK_1':'BLK_4'].values
+        order_len_list = [3, 5, 10, 15, 20, 25, 30] # 몇 일 후의 order를 볼껀지
+        order_state_list = np.empty((0,4), float)
+        for i in order_len_list:
+            order_state_list = np.vstack([order_state_list, order_state[date:date+i].sum(axis=0)])
+            
+        # 생산 대기중인 MOL 수량 구하기
+        queue_mol = np.array([0,0,0,0])
+        sum_queue = self.get_sum_groupby(self.queue)
+        for line, mol in sum_queue:
+            queue_mol[int(line)] += mol
         
-        s.append(s_action)
-        # 0 : Check, 1 : Change, 2 : Stop, 3 : Process (1)
-        s.append(self.process_mode)
-        # 0~3 : 1~4 (1)
-        s.append(s_time)
-        # action에 따른 연속 시간 (1)
+        s += [s_action, self.process_mode, self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process]
+        # (10)
+        s += list(queue_mol)
+        # 생산 대기량 (4)
         s += list(self.stock.values[0])
         # 재고량 (12)
-        s += order_state
-        # 주문량 (124)
+        s += list(order_state_list.flatten())
+        # 주문량 (28)
         
         return s
 
@@ -202,15 +257,15 @@ class FactoryEnv:
 #         return prev_score - self.get_score()
     
     def get_score(self):
-        N = self.order_stack[self.step_count // 24]
-        M = self.step_count
-        f1 = self.score_func(self.p, 10*N)
+#         N = self.order_stack[self.step_count // 24]
+#         M = self.step_count
+        f1 = self.score_func(self.p, 32550830)
         # F(p, 10N)
-        f2 = self.score_func(self.c_t, M) / (1 + 0.1*self.c_n)
+        f2 = self.score_func(self.c_t, 2184) / (1 + 0.1*self.c_n)
         # F(c, M) / (1+0.1 x c_n)
-        f3 = self.score_func(self.s_t, M) / (1 + 0.1*self.s_n)
+        f3 = self.score_func(self.s_t, 2184) / (1 + 0.1*self.s_n)
         # F(s, M) / (1+0.1 x s_n)
-        f4 = self.score_func(self.q, 10*N)
+        f4 = self.score_func(self.q, 32550830)
         # F(q, 10N)
         return 50 * f1 + 20 * f2 + 20 * f3 + 10 * f4
     
@@ -219,7 +274,8 @@ class FactoryEnv:
             return 1.0
         if x < a:
             return 1 - (x / a)
-        return 0.0
+        else:
+            return 0.0
     
     def step(self, action):
         done = False
