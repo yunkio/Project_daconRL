@@ -129,13 +129,13 @@ class DQN(nn.Module):
     def __init__(self, state_size, action_size):
         super(DQN, self).__init__()
         self.layer = layer = nn.Sequential(
-            nn.Linear(state_size, 32),
-            nn.ReLU(),
-            nn.Linear(32, 64),
+            nn.Linear(state_size, 64),
             nn.ReLU(),
             nn.Linear(64, 128),
             nn.ReLU(),
-            nn.Linear(128, action_size)
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, action_size)
         )
 
     def forward(self, x):
