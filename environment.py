@@ -10,7 +10,7 @@ class FactoryEnv:
             order.loc[91+i,:] = ['0000-00-00', 0, 0, 0, 0]
         self.order = order    
         self.order_dates = list(order[order.iloc[:,1:5].apply(sum, axis=1) != 0].index)
-        self.order_dates.append(0) # 리스트 마지막일때 오류 방지
+        self.order_dates.append(91) # 리스트 마지막일때 오류 방지
         self.order_stack = np.cumsum(list(map(int, order.iloc[:,1:5].apply(sum, axis=1)))) # 일별 누적 주문량
         self.submission = pd.read_csv("data/sample_submission.csv")
         self.max_count = pd.read_csv('data/max_count.csv')
@@ -23,6 +23,7 @@ class FactoryEnv:
         self.queue = np.empty((0,3), float)
         self.total_step = len(self.submission)
         self.step_count = 0
+        self.order_month = 202004
         self.prev_score = 1
         self.prev_action = 0
         self.prev_change = 0
@@ -36,7 +37,7 @@ class FactoryEnv:
         self.s_t = 0
         self.s_n = 0
         
-        self.mask = np.zeros([23], np.bool)
+        self.mask = np.zeros([11], np.bool)
         
 
         self.process = 0        # 생산 가능 여부, 0 이면 28 시간 검사 필요
@@ -52,10 +53,7 @@ class FactoryEnv:
         self.action_map = {0:'CHECK_1', 1:'CHECK_2', 2:'CHECK_3', 3:'CHECK_4',
                           4:'CHANGE_1', 5:'CHANGE_2', 6:'CHANGE_3', 7:'CHANGE_4',
                           8:'STOP',
-                          9:'PROCESS_0', 10:'PROCESS_0.5', 11:'PROCESS_1', 12:'PROCESS_1.5',
-                          13:'PROCESS_2', 14:'PROCESS_2.5', 15:'PROCESS_3', 16:'PROCESS_3.5',
-                          17:'PROCESS_4', 18:'PROCESS_4.5', 19:'PROCESS_5', 20:'PROCESS_5.5',
-                          21:'PROCESS_6', 22:'PROCESS_6.5'}
+                          9:'PROCESS_0', 10:'PROCESS_6.66'}
         
 #     def update_mask(self):
 #         self.mask[:] = False
@@ -119,13 +117,12 @@ class FactoryEnv:
         if order_day in self.order_dates: #납품하는 날일 경우
             
             if self.step_count == order_time: #납품해야하는 시간일 경우
-                order_month = int(''.join(self.order.loc[order_day, 'time'].split("-")[0:2])) # month
-                
+                self.order_month = int(''.join(self.order.loc[order_day, 'time'].split("-")[0:2])) # month
                 for i in range(1,5):
                     blk = 'BLK_' + str(i)
                     mol = 'MOL_' + str(i)
                     mol2blk = self.blk_dict[blk]
-                    ratio = (self.cut_yield[self.cut_yield['date'] == int(order_month)][blk].iloc[0]) / 100 # cut_yield 
+                    ratio = (self.cut_yield[self.cut_yield['date'] == int(self.order_month)][blk].iloc[0]) / 100 # cut_yield 
 
                     # 창고에 blk이 더 많으면 stock에서 뺌
                     if self.stock.loc[0,blk] >= self.order.loc[order_day, blk]:
@@ -231,7 +228,7 @@ class FactoryEnv:
         order_len = 30 # 30일 후의 주문까지 state로 고려
         date = self.step_count // 24
         order_state = self.order.loc[date : date+order_len, 'BLK_1':'BLK_4'].values
-        order_len_list = [3, 5, 10, 15, 20, 25, 30] # 몇 일 후의 order를 볼껀지
+        order_len_list = [3, 15, 30] # 몇 일 후의 order를 볼껀지
         order_state_list = np.empty((0,4), float)
         for i in order_len_list:
             order_state_list = np.vstack([order_state_list, order_state[date:date+i].sum(axis=0)])
@@ -241,15 +238,29 @@ class FactoryEnv:
         sum_queue = self.get_sum_groupby(self.queue)
         for line, mol in sum_queue:
             queue_mol[int(line)] += mol
-        
-        s += [s_action, self.process_mode, self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process]
-        # (10)
+
+        # 재고량 구하기 (blk 기준)
+        stock_mol = self.stock.values[0][4:8]
+        stock_blk = self.stock.values[0][8:]
+        stock_state = [0, 0, 0, 0]
+
+        for i in range(4):
+            blk = 'BLK_' + str(i+1)
+            mol = 'MOL_' + str(i+1)
+            mol2blk = self.blk_dict[blk]
+            ratio = (self.cut_yield[self.cut_yield['date'] == int(self.order_month)][blk].iloc[0]) / 100 
+            stock_state[i] += stock_blk[i]
+            stock_state[i] += stock_mol[i] * mol2blk * ratio
+
+
+        s += [s_action, self.process_mode, self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process, self.c_n, self.s_n]
+        # (12)
         s += list(queue_mol)
         # 생산 대기량 (4)
-        s += list(self.stock.values[0])
-        # 재고량 (12)
+        s += list(stock_state)
+        # 재고량 (4)
         s += list(order_state_list.flatten())
-        # 주문량 (28)
+        # 주문량 (12)
         
         return s
 
@@ -267,11 +278,9 @@ class FactoryEnv:
         # F(s, M) / (1+0.1 x s_n)
         f4 = self.score_func(self.q, 32550830)
         # F(q, 10N)
-        return 50 * f1 + 20 * f2 + 20 * f3 + 10 * f4
+        return f1, f2, f3, f4
     
     def score_func(self, x, a):
-        if a == 0:
-            return 1.0
         if x < a:
             return 1 - (x / a)
         else:
@@ -378,18 +387,30 @@ class FactoryEnv:
             if self.process_time == 140:
                 self.process = 0
             
-            process_n = (action - 9) # 원래 나누기 2 해야하는데... 일단 이렇게..
+            if action == 9:
+                process_n = 0
+            elif action == 10:
+                process_n = 6.66
+            
             self.day_process_n += process_n # 일별 생산량
-            new_queue = [self.process_mode, process_n, 48]
+            new_queue = [self.process_mode, process_n * 2, 48] # 라인 2개에서 하므로
             self.queue = np.vstack([self.queue, new_queue])
             self.PRT.append(new_queue[0:2] + [self.step_count])
 
         self.cal_queue()
         self.cal_order()
         
-        score = self.get_score()
+        s_p,s_c,s_s,s_q = self.get_score()
+
+        score = 50 * s_p + 20 * s_c + 10 * s_s + 20 * s_q 
+        if (s_p > 0.2) & (s_c > 0.2) & (s_s > 0.2) & (s_q > 0.2) :
+            reward = score - self.prev_score
+        else :
+            reward = -50
+            score = 0
+            done = True
+          
         state = self.get_state(self.prev_action)
-        reward = score - self.prev_score
         self.prev_score = score
         self.prev_action = action
         

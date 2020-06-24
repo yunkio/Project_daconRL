@@ -16,10 +16,10 @@ class DQNAgent():
         self.episode = 0
 
         self.discount_factor = 0.99
-        self.learning_rate = 0.000005
+        self.learning_rate = 0.000025
         self.eps = 1.0 if train else 0.0000000001
         self.eps_decay_rate = 0.999
-        self.eps_min = 0.05
+        self.eps_min = 0.01
         self.batch_size = 64
 
         self.memory = deque(maxlen=10000)
@@ -76,7 +76,7 @@ class DQNAgent():
             rewards[i] = float(mini_batch[i][2])
             next_states[i] = mini_batch[i][3]
             dones[i] = mini_batch[i][4]
-
+        
         next_q_val = self.target_model(next_states)
         q_val = self.model(states)
         exp_q_val = torch.zeros_like(q_val)
@@ -99,7 +99,7 @@ class DQNAgent():
             self.target_model.load_state_dict(self.model.state_dict())
             
     def get_mask(self, env):
-        mask = np.array([False]*23)
+        mask = np.array([False]*11)
             
         if env.check == 1:
             mask[0:4] = True
@@ -117,11 +117,9 @@ class DQNAgent():
         if env.process == 1:
             mask[9:] = True
             if env.step_count <= 554:
-                mask[10:] = False
-            if env.day_process_n >= 133.5:
-                for x1, x2 in zip(np.arange(140, 133.5, -0.5), np.arange(9, 22)):
-                    if env.day_process_n >= x1:
-                        mask[x2+1:] = False
+                mask[10] = False
+            if env.day_process_n >= 133.3:
+                mask[10] = False
         return mask
 
         
@@ -129,13 +127,13 @@ class DQN(nn.Module):
     def __init__(self, state_size, action_size):
         super(DQN, self).__init__()
         self.layer = layer = nn.Sequential(
-            nn.Linear(state_size, 64),
+            nn.Linear(state_size, 32),
+            nn.ReLU(),
+            nn.Linear(32, 64),
             nn.ReLU(),
             nn.Linear(64, 128),
             nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, action_size)
+            nn.Linear(128, action_size)
         )
 
     def forward(self, x):
