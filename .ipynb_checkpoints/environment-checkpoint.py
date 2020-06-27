@@ -272,8 +272,8 @@ class FactoryEnv:
         # 현재 모드 (4)
         s += s_processmode
         # 현재 프로세스 모드 (4)
-        s += [self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process, self.score_func(self.c_t, self.step_count) / (1 + 0.1*self.c_n), self.score_func(self.s_t, self.step_count) / (1 + 0.1*self.s_n), self.p, self.q]
-        # (12)
+        s += [self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process]
+        # (8)
         s += list(queue_blk + stock_state)
         # 재고량 (생산대기 + 재고) (4) 
         s += list(order_state_list.flatten())
@@ -502,11 +502,11 @@ class FactoryEnv:
                 else :
                     pqscore += self.score_func(-1 * diff, 32550830) * 20
 
-            reward += (scscore - (self.prev_scscore))
-            reward += (pqscore - prev_pqscore)
+            reward += (scscore - (self.prev_scscore)) 
+            reward += (pqscore - prev_pqscore) * 10
             
         
-            if reward < -1:
+            if reward < -5 or reward > 5:
                 reward = 0
 
 #             if train == True:
