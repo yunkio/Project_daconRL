@@ -15,8 +15,8 @@ class DQNAgent():
         self.target_update_interval = target_update_interval
         self.episode = 0
 
-        self.discount_factor = 0.995
-        self.learning_rate = 0.00005
+        self.discount_factor = 0.99
+        self.learning_rate = 0.000005
         self.eps = 1.0 if train else 0.0000000001
         self.eps_decay_rate = 0.999
         self.eps_min = 0.01

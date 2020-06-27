@@ -26,7 +26,7 @@ class FactoryEnv:
         self.step_count = 0
         self.order_month = 202004
         self.prev_score = 1
-        self.prev_action = 0
+        self.prev_action = 1
         self.prev_change = 0
         
         self.day_process_n = 0
@@ -487,27 +487,24 @@ class FactoryEnv:
 
 
         if self.step_count > 1:
-            prev_reward_state = np.array(self.prev_state[24:28]) - np.array(self.prev_state[20:24]) # 주문량 - 재고
-            reward_state = np.array(self.prev_state[24:28]) - np.array(stock_state)
+            prev_reward_state = np.array(self.prev_state[20:24]) - np.array(self.prev_state[16:20]) # 주문량 - 재고
+            reward_state = np.array(self.prev_state[20:24]) - np.array(stock_state)
             prev_pqscore = 0
             pqscore = 0
             for diff in prev_reward_state:
                 if diff > 0 :
-                    prev_pqscore += self.score_func(diff, 32550830) * 50
+                    prev_pqscore += (1 - self.score_func(diff, 32550830)) * 50
                 else :
-                    prev_pqscore += self.score_func(-1 * diff, 32550830) * 20
+                    prev_pqscore += (1 - self.score_func(-1 * diff, 32550830)) * 20
             for diff in reward_state:
                 if diff > 0 :
-                    pqscore += self.score_func(diff, 32550830) * 50
+                    pqscore += (1 - self.score_func(diff, 32550830)) * 50
                 else :
-                    pqscore += self.score_func(-1 * diff, 32550830) * 20
+                    pqscore += (1 - self.score_func(-1 * diff, 32550830)) * 20
 
             reward += (scscore - (self.prev_scscore)) 
-            reward += (pqscore - prev_pqscore) * 10
-            
-        
-            if reward < -5 or reward > 5:
-                reward = 0
+            reward -= (pqscore - prev_pqscore) * 10
+                
 
 #             if train == True:
 #                 if (s_p < 0.2) | (s_c < 0.2) | (s_s < 0.2) | (s_q < 0.2):
