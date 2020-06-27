@@ -9,14 +9,14 @@ from collections import deque
 
 
 class DQNAgent():
-    def __init__(self, state_size, action_size, frame_size=1, state_dict=None, target_update_interval=50, train=True):
+    def __init__(self, state_size, action_size, frame_size=1, state_dict=None, target_update_interval=35, train=True):
         self.state_size = state_size
         self.action_size = action_size
         self.target_update_interval = target_update_interval
         self.episode = 0
 
-        self.discount_factor = 0.99
-        self.learning_rate = 0.000025
+        self.discount_factor = 0.995
+        self.learning_rate = 0.00005
         self.eps = 1.0 if train else 0.0000000001
         self.eps_decay_rate = 0.999
         self.eps_min = 0.01
@@ -31,11 +31,15 @@ class DQNAgent():
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.loss = nn.MSELoss()
 
-    def get_action(self, x, mask):
+    def get_action(self, x, mask, masking = True):
+        
         if self.eps_min < self.eps:
             self.eps *= self.eps_decay_rate
         if np.random.rand() <= self.eps:
-            return random.choice(np.arange(self.action_size)[mask])
+            if masking == True:
+                return random.choice(np.arange(self.action_size)[mask])
+            else:
+                return random.choice(np.arange(self.action_size))
         else:
             x = self.preprocess_state(x)
             x = torch.FloatTensor(x)
@@ -44,9 +48,11 @@ class DQNAgent():
             x = x.detach().numpy()
             x = x[0]
             x = (x - np.min(x)) / (np.max(x) - np.min(x))
+
+        if masking == True:
             x = x * mask
 
-            return int(np.argmax(x))
+        return int(np.argmax(x))
 
     def preprocess_state(self, state):
         # new_state = state[[0, 1, 3, 4, 6, 7, 9, 10], :]
@@ -127,9 +133,9 @@ class DQN(nn.Module):
     def __init__(self, state_size, action_size):
         super(DQN, self).__init__()
         self.layer = layer = nn.Sequential(
-            nn.Linear(state_size, 32),
+            nn.Linear(state_size, 64),
             nn.ReLU(),
-            nn.Linear(32, 64),
+            nn.Linear(64, 64),
             nn.ReLU(),
             nn.Linear(64, 128),
             nn.ReLU(),

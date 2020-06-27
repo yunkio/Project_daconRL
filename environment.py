@@ -18,6 +18,7 @@ class FactoryEnv:
         self.cut_yield = pd.read_csv("data/cut_yield.csv")
         self.blk_dict = {'BLK_1' : 506, 'BLK_2' : 506, 'BLK_3' : 400, 'BLK_4' : 400}
         self.PRT = list()
+        self.date = 0
         
         
         self.queue = np.empty((0,3), float)
@@ -36,6 +37,7 @@ class FactoryEnv:
         self.c_n = 0
         self.s_t = 0
         self.s_n = 0
+        self.M = 0
         
         self.mask = np.zeros([11], np.bool)
         
@@ -111,7 +113,7 @@ class FactoryEnv:
         over = 0
         under = 0
         order_time = (self.step_count // 24) * 24 + 6
-        order_day = self.step_count // 24 # order 데이터의 row 번호
+        order_day = self.date # order 데이터의 row 번호
         
         
         if order_day in self.order_dates: #납품하는 날일 경우
@@ -208,41 +210,41 @@ class FactoryEnv:
         s = list()
         
         if prev_action in range(0,4): # Check
-            s_action = 0
-            s_time = self.check_time
+            s_action = [1, 0, 0, 0]
 
         elif prev_action in range(4,8): # Change
-            s_action = 1
-            s_time = self.change_time
+            s_action = [0, 1, 0, 0]
 
         elif prev_action == 8: # Stop
-            s_action = 2
-            s_time = self.stop_time
+            s_action = [0, 0, 1, 0]
 
         elif prev_action > 8: # Process
-            s_action = 3
-            s_time = self.process_time
+            s_action = [0, 0, 0, 1]
 
             
         # 주문량 state 구하기
-        order_len = 30 # 30일 후의 주문까지 state로 고려
-        date = self.step_count // 24
-        order_state = self.order.loc[date : date+order_len, 'BLK_1':'BLK_4'].values
-        order_len_list = [3, 15, 30] # 몇 일 후의 order를 볼껀지
-        order_state_list = np.empty((0,4), float)
-        for i in order_len_list:
-            order_state_list = np.vstack([order_state_list, order_state[date:date+i].sum(axis=0)])
+        order_len = 25 # 25일 후의 주문까지 state로 고려
+        order_state = self.order.loc[self.date : , 'BLK_1':'BLK_4'].values
+#         order_len_list = [3, 4, 5, 6, 7, 8, 10, 15, 20] # 몇 일 후의 order를 볼껀지
+#         order_state_list = np.empty((0,4), float)
+#         for i in order_len_list:
+#             order_state_list = np.vstack([order_state_list, order_state[:i].sum(axis=0)])
+        order_state_list = np.zeros([5,4], np.int) 
+        if len(order_state[3:][order_state[3:].sum(axis=1) != 0]) > 0: # 0이 아닌 애들의 누적합
+            order_state = order_state[3:][order_state[3:].sum(axis=1) != 0].cumsum(axis=0)
+            for i in range(len(order_state)):
+                order_state_list[i] = order_state[i]
+                if i == 4:
+                    break
             
-        # 생산 대기중인 MOL 수량 구하기
-        queue_mol = np.array([0,0,0,0])
-        sum_queue = self.get_sum_groupby(self.queue)
-        for line, mol in sum_queue:
-            queue_mol[int(line)] += mol
-
         # 재고량 구하기 (blk 기준)
         stock_mol = self.stock.values[0][4:8]
         stock_blk = self.stock.values[0][8:]
         stock_state = [0, 0, 0, 0]
+
+        # Process Mode 구하기
+        s_processmode = [0,0,0,0]
+        s_processmode[self.process_mode] = 1
 
         for i in range(4):
             blk = 'BLK_' + str(i+1)
@@ -251,16 +253,31 @@ class FactoryEnv:
             ratio = (self.cut_yield[self.cut_yield['date'] == int(self.order_month)][blk].iloc[0]) / 100 
             stock_state[i] += stock_blk[i]
             stock_state[i] += stock_mol[i] * mol2blk * ratio
-
-
-        s += [s_action, self.process_mode, self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process, self.c_n, self.s_n]
+            
+        # 생산 대기중인 수량 구하기 (blk 기준)
+        queue_mol = np.array([0,0,0,0])
+        queue_blk = np.array([0,0,0,0])
+        sum_queue = self.get_sum_groupby(self.queue)
+        for line, mol in sum_queue:
+            queue_mol[int(line)] += mol
+            
+        for i in range(4):
+            blk = 'BLK_' + str(i+1)
+            mol = 'MOL_' + str(i+1)            
+            mol2blk = self.blk_dict[blk]
+            ratio = (self.cut_yield[self.cut_yield['date'] == int(self.order_month)][blk].iloc[0]) / 100 
+            queue_blk[i] += queue_mol[i] * mol2blk * ratio
+            
+        s += s_action
+        # 현재 모드 (4)
+        s += s_processmode
+        # 현재 프로세스 모드 (4)
+        s += [self.check_time, self.change_time, self.stop_time, self.process_time, self.check, self.change, self.stop, self.process, self.score_func(self.c_t, self.step_count) / (1 + 0.1*self.c_n), self.score_func(self.s_t, self.step_count) / (1 + 0.1*self.s_n), self.p, self.q]
         # (12)
-        s += list(queue_mol)
-        # 생산 대기량 (4)
-        s += list(stock_state)
-        # 재고량 (4)
+        s += list(queue_blk + stock_state)
+        # 재고량 (생산대기 + 재고) (4) 
         s += list(order_state_list.flatten())
-        # 주문량 (12)
+        # 주문량 (20)
         
         return s
 
@@ -269,7 +286,7 @@ class FactoryEnv:
     
     def get_score(self):
 #         N = self.order_stack[self.step_count // 24]
-#         M = self.step_count
+        M = self.step_count
         f1 = self.score_func(self.p, 32550830)
         # F(p, 10N)
         f2 = self.score_func(self.c_t, 2184) / (1 + 0.1*self.c_n)
@@ -285,13 +302,41 @@ class FactoryEnv:
             return 1 - (x / a)
         else:
             return 0.0
-    
-    def step(self, action):
+
+    def get_mask(self):
+        mask = np.array([False]*11)
+            
+        if self.check == 1:
+            mask[0:4] = True
+            if self.prev_action in range(0,4): # 만약 이전에도 check 였다면
+                mask[:] = False
+                mask[self.prev_action] = True #계속 해라
+        if self.change == 1:
+            mask[4:8] = True # Change 다 킨다.
+            mask[self.process_mode + 4] = False # 같은 process mode로는 불가능하므로 끈다.
+            if self.prev_action in range(4,8): # 만약 이전에도 change 였다면
+                mask[:] = False
+                mask[self.prev_action] = True #계속 해라
+        if self.stop == 1:
+            mask[8] = True
+        if self.process == 1:
+            mask[9:] = True
+            if self.step_count <= 554:
+                mask[10] = False
+            if self.day_process_n >= 133.3:
+                mask[10] = False
+        self.mask = mask
+        return self.mask
+
+
+    def step(self, action, train, masking):           
         done = False
         self.step_count += 1
+        self.date = self.step_count//24
         if self.step_count % 24 == 0:
             self.day_process_n = 0 # 일별 생산량 초기화
-
+        
+        
         # Check  
         if action in range(0,4):
             if self.check_time == 28:
@@ -398,21 +443,106 @@ class FactoryEnv:
             self.PRT.append(new_queue[0:2] + [self.step_count])
 
         self.cal_queue()
+
+        ## 재고량 구하기###############################################
+
+        stock_mol = self.stock.values[0][4:8]
+        stock_blk = self.stock.values[0][8:]
+        stock_state = [0, 0, 0, 0]
+
+        for i in range(4):
+            blk = 'BLK_' + str(i+1)
+            mol = 'MOL_' + str(i+1)
+            mol2blk = self.blk_dict[blk]
+            ratio = (self.cut_yield[self.cut_yield['date'] == int(self.order_month)][blk].iloc[0]) / 100 
+            stock_state[i] += stock_blk[i]
+            stock_state[i] += stock_mol[i] * mol2blk * ratio
+
+        queue_mol = np.array([0,0,0,0])
+        queue_blk = np.array([0,0,0,0])
+        sum_queue = self.get_sum_groupby(self.queue)
+        for line, mol in sum_queue:
+            queue_mol[int(line)] += mol
+            
+        for i in range(4):
+            blk = 'BLK_' + str(i+1)
+            mol = 'MOL_' + str(i+1)            
+            mol2blk = self.blk_dict[blk]
+            ratio = (self.cut_yield[self.cut_yield['date'] == int(self.order_month)][blk].iloc[0]) / 100 
+            queue_blk[i] += queue_mol[i] * mol2blk * ratio
+
+        stock_state = list(queue_blk + stock_state)
+
+        #############################################################
+
         self.cal_order()
+        
+        state = self.get_state(self.prev_action)
         
         s_p,s_c,s_s,s_q = self.get_score()
 
-        score = 50 * s_p + 20 * s_c + 10 * s_s + 20 * s_q 
-        if (s_p > 0.2) & (s_c > 0.2) & (s_s > 0.2) & (s_q > 0.2) :
-            reward = score - self.prev_score
-        else :
-            reward = -50
-            score = 0
-            done = True
+        score = 20 * s_p + 20 * s_c + 10 * s_s + 50 * s_q 
+        scscore = 20 * s_c + 10 * s_s
+        reward = 0
+
+
+        if self.step_count > 1:
+            prev_reward_state = np.array(self.prev_state[24:28]) - np.array(self.prev_state[20:24]) # 주문량 - 재고
+            reward_state = np.array(self.prev_state[24:28]) - np.array(stock_state)
+            prev_pqscore = 0
+            pqscore = 0
+            for diff in prev_reward_state:
+                if diff > 0 :
+                    prev_pqscore += self.score_func(diff, 32550830) * 50
+                else :
+                    prev_pqscore += self.score_func(-1 * diff, 32550830) * 20
+            for diff in reward_state:
+                if diff > 0 :
+                    pqscore += self.score_func(diff, 32550830) * 50
+                else :
+                    pqscore += self.score_func(-1 * diff, 32550830) * 20
+
+            reward += (scscore - (self.prev_scscore))
+            reward += (pqscore - prev_pqscore)
+            
+        
+            if reward < -1:
+                reward = 0
+
+#             if train == True:
+#                 if (s_p < 0.2) | (s_c < 0.2) | (s_s < 0.2) | (s_q < 0.2):
+#                     score = 0
+#                     done = True
+                
+    
+            
+#         if train == True and masking == True:
+#             if (s_p > 0.2) & (s_c > 0.2) & (s_s > 0.2) & (s_q > 0.2) :
+#                 reward = score - self.prev_score
+                
+#             else :
+#                 reward = -50
+#                 score = 0
+#                 done = True
+                
+#         elif train == False:
+#             reward = score - self.prev_score
+
+#         elif masking == False:
+#             reward = 1
           
-        state = self.get_state(self.prev_action)
+        
         self.prev_score = score
+        self.prev_scscore = scscore
         self.prev_action = action
+        self.prev_state = state
+        
+        if masking == False:
+            self.get_mask()
+            mask = np.arange(11)[self.mask]
+            if action in mask:
+                reward = -100
+                done = True
         
         if self.step_count == 2185:
             done = True
